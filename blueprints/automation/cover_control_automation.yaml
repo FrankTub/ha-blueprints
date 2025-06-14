@@ -2853,6 +2853,12 @@ actions:
                 {% set dict_new = dict(dict_var, **(update_values | default({})) ) %}
                 {{ dict_new | to_json }}
 
+      ######################################################################################
+      # What target positions and how the helper should be updated is defined in all actions
+      # In this step there is an additional check whether the cover should move and tilt
+      # In some case the cover should NOT move/tilt, but the helper should be still updated
+      # This is regulated via should_cover_move_and_tilt
+      ######################################################################################
       cover_move_and_tilt_and_update_helper: &cover_move_and_tilt_and_update_helper
         - if:
             - and:
@@ -3009,7 +3015,7 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - *cover_move_and_tilt_and_update_helper
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_shading_start_action
 
@@ -3036,7 +3042,7 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - *cover_move_and_tilt_and_update_helper
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_up_action
 
@@ -3169,7 +3175,7 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - *cover_move_and_tilt_and_update_helper
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_ventilate_action
 
@@ -3223,7 +3229,7 @@ actions:
                     vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                     manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                     t: "{{ as_timestamp(now()) | round(0) }}"
-              - *cover_move_and_tilt_and_update_helper
+              - sequence: *cover_move_and_tilt_and_update_helper
               - choose: []
                 default: !input auto_down_action
 
@@ -3395,7 +3401,7 @@ actions:
                             vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                             manual: { a: 0, t: "{{ helper_state_json.manual.t }}" } # TODO: Do I really want to overwrite the status here?
                             t: "{{ as_timestamp(now()) | round(0) }}"
-                      - *cover_move_and_tilt_and_update_helper
+                      - sequence: *cover_move_and_tilt_and_update_helper
                       - choose: []
                         default: !input auto_shading_start_action
 
@@ -3642,7 +3648,7 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - *cover_move_and_tilt_and_update_helper
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_ventilate_action
 
@@ -3677,7 +3683,7 @@ actions:
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
                       should_cover_move_and_tilt: "{{ not prevent_opening_after_shading_end }}"  
-                  - *cover_move_and_tilt_and_update_helper
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_shading_end_action
 
@@ -3729,7 +3735,7 @@ actions:
                         vpart: { a: 0, t: "{{ helper_state_json.vpart.t }}" }
                         vfull: { a: 1, t: "{{ as_timestamp(now()) | round(0) }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - *cover_move_and_tilt_and_update_helper
+                  - sequence: *cover_move_and_tilt_and_update_helper
 
               ############################################################################
               # Window handle to tilt. Move the cover to the partial ventilation position
@@ -3756,7 +3762,7 @@ actions:
                         vpart: { a: 1, t: "{{ as_timestamp(now()) | round(0) }}" }
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - *cover_move_and_tilt_and_update_helper
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_ventilate_action
 
@@ -3836,7 +3842,7 @@ actions:
                         vpart: { a: 1, t: "{{ as_timestamp(now()) | round(0) }}" }
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - *cover_move_and_tilt_and_update_helper
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_ventilate_action
 
@@ -3860,7 +3866,7 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - *cover_move_and_tilt_and_update_helper
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_shading_start_action
 
@@ -3886,7 +3892,7 @@ actions:
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
                       should_cover_move_and_tilt: "{{ not prevent_opening_after_ventilation_end }}"  
-                  - *cover_move_and_tilt_and_update_helper
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_up_action
 
@@ -3910,7 +3916,7 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - *cover_move_and_tilt_and_update_helper
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_down_action
 
@@ -3938,7 +3944,7 @@ actions:
                 vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                 t: "{{ as_timestamp(now()) | round(0) }}"
-          - *cover_move_and_tilt_and_update_helper
+          - sequence: *cover_move_and_tilt_and_update_helper
           - choose: []
             default: !input auto_up_action
           # - stop: "Stop automation: FORCE OPEN"
@@ -3965,7 +3971,7 @@ actions:
                 vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                 t: "{{ as_timestamp(now()) | round(0) }}"
-          - *cover_move_and_tilt_and_update_helper
+          - sequence: *cover_move_and_tilt_and_update_helper
           - choose: []
             default: !input auto_down_action
           # - stop: "Stop automation: FORCE CLOSE"
@@ -3993,7 +3999,7 @@ actions:
                 vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                 t: "{{ as_timestamp(now()) | round(0) }}"
-          - *cover_move_and_tilt_and_update_helper
+          - sequence: *cover_move_and_tilt_and_update_helper
           - choose: []
             default: !input auto_ventilate_action
           # - stop: "Stop automation: FORCE VENTILATION"
@@ -4021,7 +4027,7 @@ actions:
                 vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                 t: "{{ as_timestamp(now()) | round(0) }}"
-          - *cover_move_and_tilt_and_update_helper
+          - sequence: *cover_move_and_tilt_and_update_helper
           - choose: []
             default: !input auto_shading_start_action
           # - stop: "Stop automation: FORCE SHADING START"
