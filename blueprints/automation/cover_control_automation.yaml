@@ -2794,38 +2794,43 @@ actions:
   - variables:
       cover_move_action: &cover_move_action
         sequence:
-          - repeat:
-              for_each: "{{ blind_entities | list }}"
-              sequence:
-                - choose:
-                    - conditions:
-                        - "{{ not prevent_default_cover_actions }}"
-                        - "{{ target_position | default(101)  == 0 }}"
-                      sequence:
-                        - alias: "Close Cover"
-                          service: cover.close_cover
-                          target:
-                            entity_id: "{{ repeat.item if repeat is defined else '' }}"
-                    - conditions:
-                        - "{{ not prevent_default_cover_actions }}"
-                        - "{{ target_position | default(101) == 100 }}"
-                      sequence:
-                        - alias: "Open Cover"
-                          service: cover.open_cover
-                          target:
-                            entity_id: "{{ repeat.item if repeat is defined else '' }}"
-                    - conditions:
-                        - "{{ not prevent_default_cover_actions }}"
-                        - "{{ target_position | default(101) not in [0, 100] }}"
-                      sequence:
-                        - alias: "Moving the cover to target position"
-                          service: cover.set_cover_position
-                          data:
-                            position: "{{ target_position | default(101) }}"
-                          target:
-                            entity_id: "{{ repeat.item if repeat is defined else '' }}"
-                - delay:
-                    seconds: "{{ (range(1, 3) | random | int) }}"
+          - if:
+              - or:
+                  - "{{ prevent_opening_movement_disabled }}"
+                  - "{{ not prevent_opening_movement_disabled and (current_position >= target_position | default(101)) }}"
+            then:
+              - repeat:
+                  for_each: "{{ blind_entities | list }}"
+                  sequence:
+                    - choose:
+                        - conditions:
+                            - "{{ not prevent_default_cover_actions }}"
+                            - "{{ target_position | default(101)  == 0 }}"
+                          sequence:
+                            - alias: "Close Cover"
+                              service: cover.close_cover
+                              target:
+                                entity_id: "{{ repeat.item if repeat is defined else '' }}"
+                        - conditions:
+                            - "{{ not prevent_default_cover_actions }}"
+                            - "{{ target_position | default(101) == 100 }}"
+                          sequence:
+                            - alias: "Open Cover"
+                              service: cover.open_cover
+                              target:
+                                entity_id: "{{ repeat.item if repeat is defined else '' }}"
+                        - conditions:
+                            - "{{ not prevent_default_cover_actions }}"
+                            - "{{ target_position | default(101) not in [0, 100] }}"
+                          sequence:
+                            - alias: "Moving the cover to target position"
+                              service: cover.set_cover_position
+                              data:
+                                position: "{{ target_position | default(101) }}"
+                              target:
+                                entity_id: "{{ repeat.item if repeat is defined else '' }}"
+                    - delay:
+                        seconds: "{{ (range(1, 3) | random | int) }}"
 
       tilt_move_action: &tilt_move_action
         sequence:
@@ -2833,6 +2838,9 @@ actions:
               - "{{ not prevent_default_cover_actions }}"
               - "{{ is_cover_tilt_enabled_and_possible }}"
               - "{{ expand(blind_entities) | selectattr('attributes.current_tilt_position', 'defined') | list | count > 0 }}"
+              - or:
+                  - "{{ prevent_opening_movement_disabled }}"
+                  - "{{ not prevent_opening_movement_disabled and (current_position >= target_position | default(101)) }}"
             then:
               - repeat:
                   for_each: "{{ blind_entities | list }}"
@@ -2872,41 +2880,6 @@ actions:
                 {% set dict_var = helper_state_json %}
                 {% set dict_new = dict(dict_var, **(update_values | default({})) ) %}
                 {{ dict_new | to_json }}
-
-      #########################################################################################
-      # What target positions and how the helper should be updated is defined in all actions
-      # In this anchor there is an additional check whether the cover should move and tilt for
-      # feature prevent_opening_movement. In some case the cover should NOT move/tilt, but the 
-      # helper should still be updated,the variable should_cover_move_and_tilt is used for this
-      #########################################################################################
-      cover_move_and_tilt_and_update_helper: &cover_move_and_tilt_and_update_helper
-        - if:
-            - and:
-                - or:
-                    - "{{ prevent_opening_movement_disabled }}"
-                    - "{{ not prevent_opening_movement_disabled and (current_position >= target_position | default(101)) }}"
-                - or:
-                    - "{{ should_cover_move_and_tilt is not defined }}"
-                    - "{{ should_cover_move_and_tilt is defined and should_cover_move_and_tilt }}"
-          then:
-            - *cover_move_action
-            - *tilt_move_action
-       # The helper should be updated if the cover was moved or tilted
-       # OR if we have created a variable in the action block should_cover_move_and_tilt
-       # This is only done when the update of the helper should happen independent of the evaluation
-       # of that expression
-        - if:
-            - or:
-                - and:
-                    - or:
-                        - "{{ prevent_opening_movement_disabled }}"
-                        - "{{ not prevent_opening_movement_disabled and (current_position >= target_position | default(101)) }}"
-                    - or:
-                        - "{{ should_cover_move_and_tilt is not defined }}"
-                        - "{{ should_cover_move_and_tilt is defined and should_cover_move_and_tilt }}"
-                - "{{ should_cover_move_and_tilt is defined }}"
-          then:
-            - *helper_update
 
   # Querying the weather forecast  #############################################
   - if:
@@ -3050,7 +3023,9 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - sequence: *cover_move_and_tilt_and_update_helper
+                  - *cover_move_action
+                  - *tilt_move_action
+                  - *helper_update
                   - choose: []
                     default: !input auto_shading_start_action
 
@@ -3077,7 +3052,9 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - sequence: *cover_move_and_tilt_and_update_helper
+                  - *cover_move_action
+                  - *tilt_move_action
+                  - *helper_update
                   - choose: []
                     default: !input auto_up_action
 
@@ -3210,7 +3187,9 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - sequence: *cover_move_and_tilt_and_update_helper
+                  - *cover_move_action
+                  - *tilt_move_action
+                  - *helper_update
                   - choose: []
                     default: !input auto_ventilate_action
 
@@ -3264,7 +3243,9 @@ actions:
                     vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                     manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                     t: "{{ as_timestamp(now()) | round(0) }}"
-              - sequence: *cover_move_and_tilt_and_update_helper
+              - *cover_move_action
+              - *tilt_move_action
+              - *helper_update
               - choose: []
                 default: !input auto_down_action
 
@@ -3436,7 +3417,9 @@ actions:
                             vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                             manual: { a: 0, t: "{{ helper_state_json.manual.t }}" } # TODO: Do I really want to overwrite the status here?
                             t: "{{ as_timestamp(now()) | round(0) }}"
-                      - sequence: *cover_move_and_tilt_and_update_helper
+                      - *cover_move_action
+                      - *tilt_move_action
+                      - *helper_update
                       - choose: []
                         default: !input auto_shading_start_action
 
@@ -3683,7 +3666,9 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - sequence: *cover_move_and_tilt_and_update_helper
+                  - *cover_move_action
+                  - *tilt_move_action
+                  - *helper_update
                   - choose: []
                     default: !input auto_ventilate_action
 
@@ -3717,8 +3702,12 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                      should_cover_move_and_tilt: "{{ not prevent_opening_after_shading_end }}"  
-                  - sequence: *cover_move_and_tilt_and_update_helper
+                  - *helper_update
+                  - if:
+                      - "{{ not prevent_opening_after_shading_end}}"
+                    then:
+                      - *cover_move_action
+                      - *tilt_move_action
                   - choose: []
                     default: !input auto_shading_end_action
 
@@ -3770,7 +3759,9 @@ actions:
                         vpart: { a: 0, t: "{{ helper_state_json.vpart.t }}" }
                         vfull: { a: 1, t: "{{ as_timestamp(now()) | round(0) }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - sequence: *cover_move_and_tilt_and_update_helper
+                  - *cover_move_action
+                  - *tilt_move_action
+                  - *helper_update
 
               ############################################################################
               # Window handle to tilt. Move the cover to the partial ventilation position
@@ -3797,7 +3788,9 @@ actions:
                         vpart: { a: 1, t: "{{ as_timestamp(now()) | round(0) }}" }
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - sequence: *cover_move_and_tilt_and_update_helper
+                  - *cover_move_action
+                  - *tilt_move_action
+                  - *helper_update
                   - choose: []
                     default: !input auto_ventilate_action
 
@@ -3877,7 +3870,9 @@ actions:
                         vpart: { a: 1, t: "{{ as_timestamp(now()) | round(0) }}" }
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - sequence: *cover_move_and_tilt_and_update_helper
+                  - *cover_move_action
+                  - *tilt_move_action
+                  - *helper_update
                   - choose: []
                     default: !input auto_ventilate_action
 
@@ -3901,7 +3896,9 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - sequence: *cover_move_and_tilt_and_update_helper
+                  - *cover_move_action
+                  - *tilt_move_action
+                  - *helper_update
                   - choose: []
                     default: !input auto_shading_start_action
 
@@ -3926,8 +3923,12 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                      should_cover_move_and_tilt: "{{ not prevent_opening_after_ventilation_end }}"  
-                  - sequence: *cover_move_and_tilt_and_update_helper
+                  - *helper_update
+                  - if:
+                      - "{{ not prevent_opening_after_ventilation_end }}"
+                    then:
+                      - *cover_move_action
+                      - *tilt_move_action
                   - choose: []
                     default: !input auto_up_action
 
@@ -3951,7 +3952,9 @@ actions:
                         vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                         t: "{{ as_timestamp(now()) | round(0) }}"
-                  - sequence: *cover_move_and_tilt_and_update_helper
+                  - *cover_move_action
+                  - *tilt_move_action
+                  - *helper_update
                   - choose: []
                     default: !input auto_down_action
 
@@ -3979,7 +3982,9 @@ actions:
                 vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                 t: "{{ as_timestamp(now()) | round(0) }}"
-          - sequence: *cover_move_and_tilt_and_update_helper
+          - *cover_move_action
+          - *tilt_move_action
+          - *helper_update
           - choose: []
             default: !input auto_up_action
           # - stop: "Stop automation: FORCE OPEN"
@@ -4006,7 +4011,9 @@ actions:
                 vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                 t: "{{ as_timestamp(now()) | round(0) }}"
-          - sequence: *cover_move_and_tilt_and_update_helper
+          - *cover_move_action
+          - *tilt_move_action
+          - *helper_update
           - choose: []
             default: !input auto_down_action
           # - stop: "Stop automation: FORCE CLOSE"
@@ -4034,7 +4041,9 @@ actions:
                 vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                 t: "{{ as_timestamp(now()) | round(0) }}"
-          - sequence: *cover_move_and_tilt_and_update_helper
+          - *cover_move_action
+          - *tilt_move_action
+          - *helper_update
           - choose: []
             default: !input auto_ventilate_action
           # - stop: "Stop automation: FORCE VENTILATION"
@@ -4062,7 +4071,9 @@ actions:
                 vfull: { a: 0, t: "{{ helper_state_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_state_json.manual.t }}" }
                 t: "{{ as_timestamp(now()) | round(0) }}"
-          - sequence: *cover_move_and_tilt_and_update_helper
+          - *cover_move_action
+          - *tilt_move_action
+          - *helper_update
           - choose: []
             default: !input auto_shading_start_action
           # - stop: "Stop automation: FORCE SHADING START"
