@@ -725,6 +725,18 @@ blueprint:
               custom_value: false
               mode: list
 
+        prevent_opening_movement:
+          name: "🚫🔼 Prevent opening of cover via Entity"
+          description: >-
+            If the status of this entity changes to on or true, the cover can only move to a more closed position and will skip all opening movements. Note that this also implicitly means that all tilt changes after opening will also be skipped. A typical use case will be when it is raining outside and you want to make sure your cover does not close while it is raining (or even a little after it stopped raining) to let the cover dry out.
+          default: []
+          selector:
+            entity:
+              domain:
+                - input_boolean
+                - binary_sensor
+                - switch
+
     helper_section:
 
       name: "Cover Status Helper"
@@ -3137,6 +3149,9 @@ trigger_variables:
   cover_status_options: !input cover_status_options
   cover_status_helper: !input cover_status_helper
 
+  # Prevent entities
+  prevent_opening_movement: !input prevent_opening_movement
+
   # Invalid states list - Shared constant
   invalid_states:
     - ''                    # Empty string
@@ -3446,6 +3461,7 @@ variables:
     shading_multiple_times: "{{ 'prevent_shading_multiple_times' in prevent_config }}"
     opening_multiple_times: "{{ 'prevent_opening_multiple_times' in prevent_config }}"
     closing_multiple_times: "{{ 'prevent_closing_multiple_times' in prevent_config }}"
+    opening_movement: "{{ prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on'] }}"
 
   auto_recover_after_force: !input auto_recover_after_force
   is_auto_recover_enabled: "{{ 'auto_recover_enabled' in auto_recover_after_force }}"
@@ -3519,6 +3535,13 @@ triggers:
     to: "off"
     enabled: "{{ resident_sensor != [] }}"
     id: "t_open_6"
+
+  - platform: state
+    entity_id: !input prevent_opening_movement
+    from: "on"
+    to: "off"
+    enabled: "{{ prevent_opening_movement != [] }}"
+    id: "t_open_7"
 
   - trigger: state
     entity_id: !input auto_up_force
@@ -4017,6 +4040,41 @@ actions:
                 {% set dict_var = helper_json %}
                 {% set dict_new = dict(dict_var, **(update_values | default({})) ) %}
                 {{ dict_new | to_json }}
+
+      #########################################################################################
+      # What target positions and how the helper should be updated is defined in all actions
+      # In this anchor there is an additional check whether the cover should move and tilt for
+      # feature prevent_opening_movement. In some case the cover should NOT move/tilt, but the 
+      # helper should still be updated,the variable should_cover_move_and_tilt is used for this
+      #########################################################################################
+      cover_move_and_tilt_and_update_helper: &cover_move_and_tilt_and_update_helper
+        - if:
+            - and:
+                - or:
+                    - "{{ not prevent_flags.opening_movement }}"
+                    - "{{ prevent_flags.opening_movement and (current_position >= target_position | default(101)) }}"
+                - or:
+                    - "{{ should_cover_move_and_tilt is not defined }}"
+                    - "{{ should_cover_move_and_tilt is defined and should_cover_move_and_tilt }}"
+          then:
+            - *cover_move_action
+            - *tilt_move_action
+       # The helper should be updated if the cover was moved or tilted
+       # OR if we have created a variable in the action block should_cover_move_and_tilt
+       # This is only done when the update of the helper should happen independent of the evaluation
+       # of that expression
+        - if:
+            - or:
+                - and:
+                    - or:
+                        - "{{ not prevent_flags.opening_movement }}"
+                        - "{{ prevent_flags.opening_movement and (current_position >= target_position | default(101)) }}"
+                    - or:
+                        - "{{ should_cover_move_and_tilt is not defined }}"
+                        - "{{ should_cover_move_and_tilt is defined and should_cover_move_and_tilt }}"
+                - "{{ should_cover_move_and_tilt is defined }}"
+          then:
+            - *helper_update
 
   # ════════════════════════════════════════════════════════════════════════════
   # Load weather forecast data from service (only when needed)
@@ -4751,12 +4809,8 @@ actions:
                         vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                         t: "{{ ts_now }}"
-                  - if:
-                      - "{{ not is_cover_movement_blocked.shading }}"
-                    then:
-                      - *cover_move_action
-                      - *tilt_move_action
-                  - *helper_update
+                      should_cover_move_and_tilt: "{{ not is_cover_movement_blocked.shading }}" 
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - if:
                       - "{{ not is_cover_movement_blocked.shading }}"
                     then:
@@ -4788,12 +4842,8 @@ actions:
                         vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                         t: "{{ ts_now }}"
-                  - if:
-                      - "{{ not is_cover_movement_blocked.open }}"
-                    then:
-                      - *cover_move_action
-                      - *tilt_move_action
-                  - *helper_update
+                      should_cover_move_and_tilt: "{{ not is_cover_movement_blocked.open }}"  
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - if:
                       - "{{ not is_cover_movement_blocked.open }}"
                     then:
@@ -4901,12 +4951,8 @@ actions:
                         vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                         t: "{{ ts_now }}"
-                  - if:
-                      - "{{ not is_cover_movement_blocked.ventilate }}"
-                    then:
-                      - *cover_move_action
-                      - *tilt_move_action
-                  - *helper_update
+                      should_cover_move_and_tilt: "{{ not is_cover_movement_blocked.ventilate }}"  
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - if:
                       - "{{ not is_cover_movement_blocked.ventilate }}"
                     then:
@@ -4967,12 +5013,8 @@ actions:
                     vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                     manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                     t: "{{ ts_now }}"
-              - if:
-                  - "{{ not is_cover_movement_blocked.close }}"
-                then:
-                  - *cover_move_action
-                  - *tilt_move_action
-              - *helper_update
+                  should_cover_move_and_tilt: "{{ not is_cover_movement_blocked.close }}" 
+              - sequence: *cover_move_and_tilt_and_update_helper
               - if:
                   - "{{ not is_cover_movement_blocked.close }}"
                 then:
@@ -5107,12 +5149,8 @@ actions:
                             vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                             manual: { a: 0, t: "{{ helper_json.manual.t }}" } # TODO: Do I really want to overwrite the status here?
                             t: "{{ ts_now }}"
-                      - if:
-                          - "{{ not is_cover_movement_blocked.shading }}"
-                        then:
-                          - *cover_move_action
-                          - *tilt_move_action
-                      - *helper_update
+                          should_cover_move_and_tilt: "{{ not is_cover_movement_blocked.shading }}"  
+                      - sequence: *cover_move_and_tilt_and_update_helper
                       - if:
                           - "{{ not is_cover_movement_blocked.shading }}"
                         then:
@@ -5219,7 +5257,7 @@ actions:
         conditions:
           - "{{ is_shading_enabled }}"
           - "{{ trigger.id is defined }}"
-          - "{{ trigger.id | regex_match('^(t_shading_end)') }}"
+          - "{{ trigger.id | regex_match('^(t_shading_end|t_open_7)') }}" # If opening movement was not allowed upfront but shading was finished while all opening movements were blocked this needs to be triggered again
           - "{{ is_status_helper_enabled }}"
           - condition: !input auto_shading_end_condition
           - or:
@@ -5360,12 +5398,8 @@ actions:
                             vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                             manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                             t: "{{ ts_now }}"
-                      - if:
-                          - "{{ not is_cover_movement_blocked.any }}"
-                        then:
-                          - *cover_move_action
-                          - *tilt_move_action
-                      - *helper_update
+                          should_cover_move_and_tilt: "{{ not is_cover_movement_blocked.any }}"
+                      - sequence: *cover_move_and_tilt_and_update_helper
                       - if:
                           - "{{ not is_cover_movement_blocked.any }}"
                         then:
@@ -5417,12 +5451,8 @@ actions:
                                 vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                                 manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                                 t: "{{ ts_now }}"
-                          - if:
-                              - "{{ not is_cover_movement_blocked.any }}"
-                            then:
-                              - *cover_move_action
-                              - *tilt_move_action
-                          - *helper_update
+                              should_cover_move_and_tilt: "{{ not is_cover_movement_blocked.any }}"
+                          - sequence: *cover_move_and_tilt_and_update_helper
                         else:
                           - variables:
                               update_values:
@@ -5484,7 +5514,7 @@ actions:
         conditions:
           - "{{ is_ventilation_enabled }}"
           - "{{ trigger.id is defined }}"
-          - "{{ trigger.id in ['t_contact_tilted_changed', 't_contact_opened_changed'] or trigger.id.startswith('t_force_disabled') }}"
+          - "{{ trigger.id in ['t_contact_tilted_changed', 't_contact_opened_changed', 't_open_7'] or trigger.id.startswith('t_force_disabled') }}" # If window was opened and the cover was not allowed to move to a more open position then we need to retrigger this par
           - "{{ is_status_helper_enabled }}"
           - "{{ trigger.from_state.state not in invalid_states }}"
           - "{{ trigger.to_state.state not in invalid_states }}"
@@ -5530,12 +5560,8 @@ actions:
                         vpart: { a: 0, t: "{{ helper_json.vpart.t }}" }
                         vfull: { a: 1, t: "{{ ts_now }}" }
                         t: "{{ ts_now }}"
-                  - if:
-                      - "{{ not is_cover_movement_blocked.open }}"
-                    then:
-                      - *cover_move_action
-                      - *tilt_move_action
-                  - *helper_update
+                      should_cover_move_and_tilt: "{{ not is_cover_movement_blocked.open }}"
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - stop: "Ventilation Start (Full) executed"
 
               ###################################
@@ -5579,12 +5605,8 @@ actions:
                         vpart: { a: 1, t: "{{ ts_now }}" }
                         vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                         t: "{{ ts_now }}"
-                  - if:
-                      - "{{ not is_cover_movement_blocked.ventilate }}"
-                    then:
-                      - *cover_move_action
-                      - *tilt_move_action
-                  - *helper_update
+                      should_cover_move_and_tilt: "{{ not is_cover_movement_blocked.ventilate }}"
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - if:
                       - "{{ not is_cover_movement_blocked.ventilate }}"
                     then:
@@ -5630,9 +5652,7 @@ actions:
                         vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                         t: "{{ ts_now }}"
-                  - *cover_move_action
-                  - *tilt_move_action
-                  - *helper_update
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_shading_start_action
                   - stop: "Ventilation End: Return to Shading executed"
@@ -5676,12 +5696,8 @@ actions:
                         vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                         t: "{{ ts_now }}"
-                  - *helper_update
-                  - if:
-                      - "{{ not prevent_flags.opening_after_ventilation_end }}"
-                    then:
-                      - *cover_move_action
-                      - *tilt_move_action
+                      should_cover_move_and_tilt: "{{ not prevent_flags.opening_after_ventilation_end }}"
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_up_action
                   - stop: "Ventilation End: Return to Open executed"
@@ -5724,9 +5740,7 @@ actions:
                         vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                         t: "{{ ts_now }}"
-                  - *cover_move_action
-                  - *tilt_move_action
-                  - *helper_update
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_down_action
                   - stop: "Ventilation End: Return to Close executed"
@@ -5755,9 +5769,7 @@ actions:
                 vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                 t: "{{ ts_now }}"
-          - *cover_move_action
-          - *tilt_move_action
-          - *helper_update
+          - sequence: *cover_move_and_tilt_and_update_helper
           - choose: []
             default: !input auto_up_action
           - stop: "Force Open executed"
@@ -5786,9 +5798,7 @@ actions:
                 vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                 t: "{{ ts_now }}"
-          - *cover_move_action
-          - *tilt_move_action
-          - *helper_update
+          - sequence: *cover_move_and_tilt_and_update_helper
           - choose: []
             default: !input auto_down_action
           - stop: "Force Close executed"
@@ -5818,9 +5828,7 @@ actions:
                 vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                 t: "{{ ts_now }}"
-          - *cover_move_action
-          - *tilt_move_action
-          - *helper_update
+          - sequence: *cover_move_and_tilt_and_update_helper
           - choose: []
             default: !input auto_ventilate_action
           - stop: "Force Ventilation executed"
@@ -5850,9 +5858,7 @@ actions:
                 vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                 manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                 t: "{{ ts_now }}"
-          - *cover_move_action
-          - *tilt_move_action
-          - *helper_update
+          - sequence: *cover_move_and_tilt_and_update_helper
           - choose: []
             default: !input auto_shading_start_action
           - stop: "Force Shading executed"
@@ -6052,8 +6058,7 @@ actions:
                   - variables:
                       target_position: !input close_position
                       target_tilt_position: "{{ close_tilt_position | int }}"
-                  - *cover_move_action
-                  - *tilt_move_action
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_down_action
                   - stop: "Return to Close executed"
@@ -6067,8 +6072,7 @@ actions:
                   - variables:
                       target_position: !input shading_position
                       target_tilt_position: "{{ shading_tilt_position | int }}"
-                  - *cover_move_action
-                  - *tilt_move_action
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_shading_start_action
                   - stop: "Return to Shading executed"
@@ -6082,8 +6086,7 @@ actions:
                   - variables:
                       target_position: !input ventilate_position
                       target_tilt_position: !input ventilate_tilt_position
-                  - *cover_move_action
-                  - *tilt_move_action
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_ventilate_action
                   - stop: "Return to Ventilation executed"
@@ -6097,8 +6100,7 @@ actions:
                   - variables:
                       target_position: !input open_position
                       target_tilt_position: "{{ open_tilt_position | int }}"
-                  - *cover_move_action
-                  - *tilt_move_action
+                  - sequence: *cover_move_and_tilt_and_update_helper
                   - choose: []
                     default: !input auto_up_action
                   - stop: "Return to Open executed"
@@ -6268,6 +6270,8 @@ actions:
                   message: "resident_sensor has invalid state. Must be: on, off, true, or false"
                 - condition: "{{ is_brightness_enabled and (default_brightness_sensor == [] or not is_number(states(default_brightness_sensor))) }}"
                   message: "Brightness sensor not configured or has non-numeric state"
+                - condition: "{{ (prevent_opening_movement != [] ) and (not states(prevent_opening_movement) in ['false', 'off','true', 'on']) }}"
+                  message: "prevent_opening_movement is only allowed to be on/off/true/false"
 
                 # ========== HELPER CONFIGURATION CHECKS ==========
                 - condition: "{{ 'cover_helper_enabled' in cover_status_options and state_attr(cover_status_helper, 'max') < 254 }}"
