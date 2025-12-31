@@ -227,6 +227,18 @@ blueprint:
               custom_value: false
               mode: list
 
+        prevent_opening_movement:
+          name: "🚫🔼 Prevent opening of cover via Entity"
+          description: >-
+            If the status of this entity changes to on or true, the cover can only move to a more closed position and will skip all opening movements. Note that this also implicitly means that all tilt changes after opening will also be skipped. A typical use case will be when it is raining outside and you want to make sure your cover does not close while it is raining (or even a little after it stopped raining) to let the cover dry out.
+          default: []
+          selector:
+            entity:
+              domain:
+                - input_boolean
+                - binary_sensor
+                - switch
+
     helper_section:
 
       name: "Cover Status Helper"
@@ -2713,6 +2725,9 @@ trigger_variables:
   cover_status_options: !input cover_status_options
   cover_status_helper: !input cover_status_helper
 
+  # Prevent entities
+  prevent_opening_movement: !input prevent_opening_movement
+
   # Invalid states list - Shared constant
   invalid_states:
     - ''                    # Empty string
@@ -3004,11 +3019,12 @@ variables:
 
   # Force entity disabled states
   is_cover_movement_blocked:
-    open: "{{ (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) }}"
+    open: "{{ (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) or (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on']) }}"
+    opening_movement: "{{ prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on'] }}"
     close: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) }}"
-    ventilate: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) }}"
+    ventilate: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) or (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on']) }}"
     shading: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) }}"
-    any: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) }}"
+    any: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) or (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on']) }}"
 
   # Resident sensor configuration
   resident_config: !input resident_config
@@ -3048,6 +3064,7 @@ variables:
     shading_multiple_times: "{{ 'prevent_shading_multiple_times' in prevent_config }}"
     opening_multiple_times: "{{ 'prevent_opening_multiple_times' in prevent_config }}"
     closing_multiple_times: "{{ 'prevent_closing_multiple_times' in prevent_config }}"
+    opening_movement: "{{ prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on'] }}"
 
   auto_recover_after_force: !input auto_recover_after_force
   is_auto_recover_enabled: "{{ 'auto_recover_enabled' in auto_recover_after_force }}"
@@ -3135,6 +3152,13 @@ triggers:
     to: "off"
     enabled: "{{ resident_sensor != [] }}"
     id: "t_open_6"
+
+  - platform: state
+    entity_id: !input prevent_opening_movement
+    from: "on"
+    to: "off"
+    enabled: "{{ prevent_opening_movement != [] }}"
+    id: "t_open_7"
 
   - trigger: state
     entity_id: !input auto_up_force
@@ -4369,6 +4393,7 @@ actions:
                   - variables:
                       target_position: !input shading_position
                       target_tilt_position: "{{ shading_tilt_position | int }}"
+                      current_above_target_position: "{{ current_position < target_position if is_awning else current_position > target_position }}"
                       ts_now: "{{ as_timestamp(now()) | round(0) }}" # Note: ts_now must be evaluated at runtime after delays, not at blueprint load time
                       update_values:
                         open: { a: 1, t: "{{ ts_now }}" }
@@ -4378,14 +4403,14 @@ actions:
                         vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                         t: "{{ ts_now }}"
-                  - if: "{{ not is_cover_movement_blocked.shading }}"
+                  - if: "{{ not is_cover_movement_blocked.shading and (not is_cover_movement_blocked.opening_movement or current_above_target_position) }}"
                     then:
                       - *cover_move_action
                       - *tilt_move_action
                       - choose: []
                         default: !input auto_shading_start_action
                   - if:
-                      - "{{ is_auto_recover_enabled or not is_cover_movement_blocked.shading }}"
+                      - "{{ is_auto_recover_enabled or (not is_cover_movement_blocked.shading and (not is_cover_movement_blocked.opening_movement or current_above_target_position)) }}"
                     then:
                       - *helper_update
                   - stop: "Opening skipped: Shading detected"
@@ -4716,6 +4741,7 @@ actions:
                       - variables:
                           target_position: !input shading_position
                           target_tilt_position: "{{ shading_tilt_position | int }}"
+                          current_above_target_position: "{{ current_position < target_position if is_awning else current_position > target_position }}"
                           ts_now: "{{ as_timestamp(now()) | round(0) }}" # Note: ts_now must be evaluated at runtime after delays, not at blueprint load time
                           update_values:
                             open: { a: 1, t: "{{ ts_now }}" }
@@ -4725,14 +4751,14 @@ actions:
                             vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                             manual: { a: 0, t: "{{ helper_json.manual.t }}" } # TODO: Do I really want to overwrite the status here?
                             t: "{{ ts_now }}"
-                      - if: "{{ not is_cover_movement_blocked.shading }}"
+                      - if: "{{ not is_cover_movement_blocked.shading and (not is_cover_movement_blocked.opening_movement or current_above_target_position) }}"
                         then:
                           - *cover_move_action
                           - *tilt_move_action
                           - choose: []
                             default: !input auto_shading_start_action
                       - if:
-                          - "{{ is_auto_recover_enabled or not is_cover_movement_blocked.shading }}"
+                          - "{{ is_auto_recover_enabled or (not is_cover_movement_blocked.shading and (not is_cover_movement_blocked.opening_movement or current_above_target_position)) }}"
                         then:
                           - *helper_update
                       - stop: "Shading Start executed"
@@ -4836,7 +4862,7 @@ actions:
         conditions:
           - "{{ is_shading_enabled }}"
           - "{{ trigger.id is defined }}"
-          - "{{ trigger.id | regex_match('^(t_shading_end)') }}"
+          - "{{ trigger.id | regex_match('^(t_shading_end|t_open_7)') }}" # If opening movement was not allowed upfront but shading was finished while all opening movements were blocked this needs to be triggered again
           - "{{ is_status_helper_enabled }}"
           - condition: !input auto_shading_end_condition
           - or:
@@ -5096,7 +5122,7 @@ actions:
         conditions:
           - "{{ is_ventilation_enabled }}"
           - "{{ trigger.id is defined }}"
-          - "{{ trigger.id in ['t_contact_tilted_changed', 't_contact_opened_changed'] }}"
+          - "{{ trigger.id in ['t_contact_tilted_changed', 't_contact_opened_changed', 't_open_7'] or trigger.id.startswith('t_force_disabled') }}" # If window was opened and the cover was not allowed to move to a more open position then we need to retrigger this part
           - "{{ is_status_helper_enabled }}"
           - "{{ trigger.from_state.state not in invalid_states }}"
           - "{{ trigger.to_state.state not in invalid_states }}"
@@ -5769,6 +5795,8 @@ actions:
                   message: "resident_sensor has invalid state. Must be: on, off, true, or false"
                 - condition: "{{ is_brightness_enabled and (default_brightness_sensor == [] or not is_number(states(default_brightness_sensor))) }}"
                   message: "Brightness sensor not configured or has non-numeric state"
+                - condition: "{{ (prevent_opening_movement != [] ) and (not states(prevent_opening_movement) in ['false', 'off','true', 'on']) }}"
+                  message: "prevent_opening_movement is only allowed to be on/off/true/false"
 
                 # ========== SUN ELEVATION MODE CHECKS ==========
                 - condition: >-
