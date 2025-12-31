@@ -3022,7 +3022,7 @@ variables:
     open: "{{ (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) or (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on']) }}"
     opening_movement: "{{ prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on'] }}"
     close: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) }}"
-    ventilate: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) }}"
+    ventilate: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) or (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on']) }}"
     shading: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) }}"
     any: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) or (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on']) }}"
 
@@ -4874,7 +4874,7 @@ actions:
         conditions:
           - "{{ is_shading_enabled }}"
           - "{{ trigger.id is defined }}"
-          - "{{ trigger.id | regex_match('^(t_shading_end)') }}"
+          - "{{ trigger.id | regex_match('^(t_shading_end|t_open_7)') }}" # If opening movement was not allowed upfront but shading was finished while all opening movements were blocked this needs to be triggered again
           - "{{ is_status_helper_enabled }}"
           - condition: !input auto_shading_end_condition
           - or:
@@ -5134,7 +5134,7 @@ actions:
         conditions:
           - "{{ is_ventilation_enabled }}"
           - "{{ trigger.id is defined }}"
-          - "{{ trigger.id in ['t_contact_tilted_changed', 't_contact_opened_changed'] or trigger.id.startswith('t_force_disabled') }}"
+          - "{{ trigger.id in ['t_contact_tilted_changed', 't_contact_opened_changed', 't_open_7'] or trigger.id.startswith('t_force_disabled') }}" # If window was opened and the cover was not allowed to move to a more open position then we need to retrigger this part
           - "{{ is_status_helper_enabled }}"
           - "{{ trigger.from_state.state not in invalid_states }}"
           - "{{ trigger.to_state.state not in invalid_states }}"
