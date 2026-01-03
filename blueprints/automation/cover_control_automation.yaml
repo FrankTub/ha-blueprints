@@ -3577,6 +3577,8 @@ actions:
             value_template: "{{ not is_cover_movement_blocked.any or trigger.id is match('^t_force_') }}"
           - condition: template
             value_template: "{{ not prevent_flags.default_cover_actions }}"
+          - condition: template
+            value_template: "{{ target_position != current_position }}"
           - repeat:
               for_each: "{{ blind_entities | list }}"
               sequence:
