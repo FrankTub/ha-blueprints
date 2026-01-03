@@ -3575,6 +3575,8 @@ actions:
         sequence:
           - condition: template
             value_template: "{{ not prevent_flags.default_cover_actions }}"
+          - condition: template
+            value_template: "{{ target_position != current_position }}"
           - repeat:
               for_each: "{{ blind_entities | list }}"
               sequence:
