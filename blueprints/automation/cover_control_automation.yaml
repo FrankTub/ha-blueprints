@@ -4305,6 +4305,13 @@ actions:
           is_auto_recover_enabled or
           (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on'])
         }}
+      
+      # Should the helper status be tracked even when the cover did not move?
+      update_helper_even_if_cover_should_not_move: >-
+        {{
+          is_auto_recover_enabled or
+          (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on'])
+        }}
 
   # Initialise empty helper with JSON default values ###########################
   - if:
@@ -4874,7 +4881,7 @@ actions:
         conditions:
           - "{{ is_shading_enabled }}"
           - "{{ trigger.id is defined }}"
-          - "{{ trigger.id | regex_match('^(t_shading_end|t_open_7)') }}" # If opening movement was not allowed upfront but shading was finished while all opening movements were blocked this needs to be triggered again
+          - "{{ trigger.id | regex_match('^(t_shading_end)') }}"
           - "{{ is_status_helper_enabled }}"
           - condition: !input auto_shading_end_condition
           - or:
@@ -5134,7 +5141,7 @@ actions:
         conditions:
           - "{{ is_ventilation_enabled }}"
           - "{{ trigger.id is defined }}"
-          - "{{ trigger.id in ['t_contact_tilted_changed', 't_contact_opened_changed', 't_open_7'] or trigger.id.startswith('t_force_disabled') }}" # If window was opened and the cover was not allowed to move to a more open position then we need to retrigger this part
+          - "{{ trigger.id in ['t_contact_tilted_changed', 't_contact_opened_changed'] or trigger.id.startswith('t_force_disabled') }}"
           - "{{ is_status_helper_enabled }}"
           - "{{ trigger.from_state.state not in invalid_states }}"
           - "{{ trigger.to_state.state not in invalid_states }}"
