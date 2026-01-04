@@ -4769,7 +4769,7 @@ actions:
                           - choose: []
                             default: !input auto_shading_start_action
                       - if:
-                          - "{{ update_helper_even_if_cover_should_not_move or (not is_cover_movement_blocked.shading and (not (is_cover_movement_blocked.opening_movement and current_below_target_position)) }}"
+                          - "{{ update_helper_even_if_cover_should_not_move or (not is_cover_movement_blocked.shading and not (is_cover_movement_blocked.opening_movement and current_below_target_position)) }}"
                         then:
                           - *helper_update
                       - stop: "Shading Start executed"
