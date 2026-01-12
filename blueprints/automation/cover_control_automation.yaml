@@ -3022,7 +3022,7 @@ variables:
     open: "{{ (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) or (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on']) }}"
     opening_movement: "{{ prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on'] }}"
     close: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) }}"
-    ventilate: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) or (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on']) }}"
+    ventilate: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) }}"
     shading: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) }}"
     any: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) or (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on']) }}"
 
@@ -4547,6 +4547,7 @@ actions:
                   - variables:
                       target_position: !input ventilate_position
                       target_tilt_position: !input ventilate_tilt_position
+                      current_below_target_position: "{{ current_position > target_position if is_awning else current_position < target_position }}" # 0 is closed and 100 is open for not is_awning
                       ts_now: "{{ as_timestamp(now()) | round(0) }}" # Note: ts_now must be evaluated at runtime after delays, not at blueprint load time
                       update_values:
                         open: { a: 0, t: "{{ helper_json.open.t }}" }
@@ -4556,14 +4557,14 @@ actions:
                         vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                         manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                         t: "{{ ts_now }}"
-                  - if: "{{ not is_cover_movement_blocked.ventilate }}"
+                  - if: "{{ not is_cover_movement_blocked.ventilate and not (is_cover_movement_blocked.opening_movement and current_below_target_position) }}"
                     then:
                       - *cover_move_action
                       - *tilt_move_action
                       - choose: []
                         default: !input auto_ventilate_action
                   - if:
-                      - "{{ update_helper_even_if_cover_should_not_move or not is_cover_movement_blocked.ventilate }}"
+                      - "{{ update_helper_even_if_cover_should_not_move or (not is_cover_movement_blocked.ventilate and not (is_cover_movement_blocked.opening_movement and current_below_target_position)) }}"
                     then:
                       - *helper_update
                   - stop: "Closing skipped: Window tilted (Ventilation activated)"
@@ -5220,19 +5221,20 @@ actions:
                   - variables:
                       target_position: !input ventilate_position
                       target_tilt_position: !input ventilate_tilt_position
+                      current_below_target_position: "{{ current_position > target_position if is_awning else current_position < target_position }}" # 0 is closed and 100 is open for not is_awning
                       ts_now: "{{ as_timestamp(now()) | round(0) }}"
                       update_values:
                         vpart: { a: 1, t: "{{ ts_now }}" }
                         vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                         t: "{{ ts_now }}"
-                  - if: "{{ not is_cover_movement_blocked.ventilate }}"
+                  - if: "{{ not is_cover_movement_blocked.ventilate and not (is_cover_movement_blocked.opening_movement and current_below_target_position) }}"
                     then:
                       - *cover_move_action
                       - *tilt_move_action
                       - choose: []
                         default: !input auto_ventilate_action
                   - if:
-                      - "{{ update_helper_even_if_cover_should_not_move or not is_cover_movement_blocked.ventilate }}"
+                      - "{{ update_helper_even_if_cover_should_not_move or (not is_cover_movement_blocked.ventilate and not (is_cover_movement_blocked.opening_movement and current_below_target_position)) }}"
                     then:
                       - *helper_update
                   - stop: "Ventilation Start (Partial) executed"
