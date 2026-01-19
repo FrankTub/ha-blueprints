@@ -4305,13 +4305,6 @@ actions:
           is_auto_recover_enabled or
           (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on'])
         }}
-      
-      # Should the helper status be tracked even when the cover did not move?
-      update_helper_even_if_cover_should_not_move: >-
-        {{
-          is_auto_recover_enabled or
-          (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on'])
-        }}
 
   # Initialise empty helper with JSON default values ###########################
   - if:
