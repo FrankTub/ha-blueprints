@@ -3024,7 +3024,7 @@ variables:
     close: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) }}"
     ventilate: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) }}"
     shading: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) }}"
-    any: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) or (prevent_opening_movement != [] and states(prevent_opening_movement) in ['true', 'on']) }}"
+    any: "{{ (auto_up_force != [] and states(auto_up_force) in ['on', 'true']) or (auto_down_force != [] and states(auto_down_force) in ['on', 'true']) or (auto_ventilate_force != [] and states(auto_ventilate_force) in ['on', 'true']) or (auto_shading_start_force != [] and states(auto_shading_start_force) in ['on', 'true']) }}"
 
   # Resident sensor configuration
   resident_config: !input resident_config
@@ -4730,7 +4730,7 @@ actions:
                       - "{{ trigger.id | regex_match('^(t_shading_start_execution)') }}"
                       - "{{ helper_status.shading_start_pending }}" # Only when it comes back from pending status
                       - or: # Position check: Skip if force active with background tracking (helper update only)
-                          - "{{ is_cover_movement_blocked.any and update_helper_even_if_cover_should_not_move }}"
+                          - "{{ (is_cover_movement_blocked.any or is_cover_movement_blocked.opening_movement) and update_helper_even_if_cover_should_not_move }}"
                           - and:
                               - "{{ not is_cover_tilt_enabled_and_possible }}"
                               - "{{ position_comparisons.current_above_shading }}"
@@ -4783,7 +4783,7 @@ actions:
                       - "{{ trigger.id | regex_match('^(t_shading_start_execution)') }}"
                       - "{{ helper_status.shading_start_pending }}" # Only when it comes back from pending status
                       - "{{ helper_status.closed }}" # At this point, the times for shading are not taken into account so that the correct value is available when the cover is opened.
-                      - "{{ not is_cover_movement_blocked.any }}" # Skip if force active - let "Start Shading" handle background state
+                      - "{{ not (is_cover_movement_blocked.any or is_cover_movement_blocked.opening_movement) }}" # Skip if force active - let "Start Shading" handle background state
                     sequence:
                       - variables:
                           ts_now: "{{ as_timestamp(now()) | round(0) }}" # Note: ts_now must be evaluated at runtime after delays, not at blueprint load time
@@ -5006,6 +5006,7 @@ actions:
                       - variables:
                           target_position: !input ventilate_position
                           target_tilt_position: !input ventilate_tilt_position
+                          current_below_target_position: "{{ current_position > target_position if is_awning else current_position < target_position }}" # 0 is closed and 100 is open for not is_awning
                           ts_now: "{{ as_timestamp(now()) | round(0) }}" # Note: ts_now must be evaluated at runtime after delays, not at blueprint load time
                           update_values:
                             open: { a: 1, t: "{{ ts_now }}" }
@@ -5015,14 +5016,14 @@ actions:
                             vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                             manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                             t: "{{ ts_now }}"
-                      - if: "{{ not is_cover_movement_blocked.any }}"
+                      - if: "{{ not is_cover_movement_blocked.any and not (is_cover_movement_blocked.opening_movement and current_below_target_position) }}"
                         then:
                           - *cover_move_action
                           - *tilt_move_action
                           - choose: []
                             default: !input auto_ventilate_action
                       - if:
-                          - "{{ update_helper_even_if_cover_should_not_move or not is_cover_movement_blocked.any }}"
+                          - "{{ update_helper_even_if_cover_should_not_move or (not is_cover_movement_blocked.any and not (is_cover_movement_blocked.opening_movement and current_below_target_position)) }}"
                         then:
                           - *helper_update
                       - stop: "Shading End: Ventilation activated"
@@ -5062,6 +5063,7 @@ actions:
                           - variables:
                               target_position: "{{ open_position }}"
                               target_tilt_position: "{{ open_tilt_position | int }}"
+                              current_below_target_position: "{{ current_position > target_position if is_awning else current_position < target_position }}" # 0 is closed and 100 is open for not is_awning
                               ts_now: "{{ as_timestamp(now()) | round(0) }}" # Note: ts_now must be evaluated at runtime after delays, not at blueprint load time
                               update_values:
                                 open: { a: 1, t: "{{ ts_now }}" }
@@ -5071,7 +5073,7 @@ actions:
                                 vfull: { a: 0, t: "{{ helper_json.vfull.t }}" }
                                 manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                                 t: "{{ ts_now }}"
-                          - if: "{{ not is_cover_movement_blocked.any }}"
+                          - if: "{{ not is_cover_movement_blocked.any and not (is_cover_movement_blocked.opening_movement and current_below_target_position) }}"
                             then:
                               - *cover_move_action
                               - *tilt_move_action
@@ -5316,6 +5318,7 @@ actions:
                   - variables:
                       target_position: !input open_position
                       target_tilt_position: !input open_tilt_position
+                      current_below_target_position: "{{ current_position > target_position if is_awning else current_position < target_position }}" # 0 is closed and 100 is open for not is_awning
                       ts_now: "{{ as_timestamp(now()) | round(0) }}"
                       update_values:
                         open: { a: 1, t: "{{ ts_now }}" }
@@ -5326,7 +5329,7 @@ actions:
                         manual: { a: 0, t: "{{ helper_json.manual.t }}" }
                         t: "{{ ts_now }}"
                   - if:
-                      - "{{ not prevent_flags.opening_after_ventilation_end }}"
+                      - "{{ not prevent_flags.opening_after_ventilation_end and not (is_cover_movement_blocked.opening_movement and current_below_target_position) }}"
                     then:
                       - *cover_move_action
                       - *tilt_move_action
@@ -5684,7 +5687,7 @@ actions:
           - "{{ trigger.id.startswith('t_force_disabled') }}"
           - "{{ update_helper_even_if_cover_should_not_move }}"
           - "{{ is_status_helper_enabled }}"
-          - "{{ not is_cover_movement_blocked.any }}" # All force functions must now be disabled
+          - "{{ not is_cover_movement_blocked.any and not is_cover_movement_blocked.opening_movement }}" # All force functions must now be disabled
         sequence:
           - delay:
               seconds: "{{ range(drive_delay_fix|int(0), drive_delay_fix|int(0) + drive_delay_random|int(0) +1) | random }}"
